@@ -1,14 +1,36 @@
 #include <cassert>
+#include <define>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <thread>
 #include <unistd.h>
+#include <vector>
 
 namespace what::Log {
+
+typedef void (*call_back_handler_t)(void *user_data, Message &);
+typedef void (*flush_handler_t)(void *user_data);
+typedef void (*close_handler_t)(void *user_data);
 
 #define THREADNAME_WIDTH 16
 #define FILENAME_WIDTH 23
 #define PRIFIX_WIDTH (53 + THREADNAME_WIDTH + FILENAME_WIDTH)
+
+//* VT100 control your terminal
+#ifdef TERMINAL_HAS_COLOR
+//! make sure that your terminal has color
+#define VTSEQ(ID) ("\033[" #ID "m")
+#else
+#define VTSEQ(ID) ""
+#endif
+
+const char *terminal_red() { return VTSEQ(31); }
+const char *terminal_green() { return VTSEQ(32); }
+const char *terminal_yellow() { return VTSEQ(33); }
+const char *terminal_dim() { return VTSEQ(2); }
+//! start and end with it everytime
+const char *terminal_reset() { return VTSEQ(0); }
 
 #define ASSERT(predict, str)                                                   \
   do {                                                                         \
@@ -27,10 +49,10 @@ namespace what::Log {
 
 enum class Verbosity {
   VerbosityFATAL = -3,
-  VerbosityERROR,
-  VerbosityWARNING,
-  VerbosityINFO,
-  VerbosityMESSAGE,
+  VerbosityERROR = -2,
+  VerbosityWARNING = -1,
+  VerbosityINFO = 0,
+  VerbosityMESSAGE = 1, //普通的信息
 };
 
 auto get_verbosity_name(Verbosity verbosity) -> char *;
@@ -70,17 +92,50 @@ class Message {
 public:
   /* already in prifix*/
   Verbosity verbosity;
+
   const char *file;
+
   unsigned int line;
+
   const char *prifix;
+
   const char *raw_message;
 };
+
+class CallBack {
+public:
+  void *user_data;
+
+  call_back_handler_t call_back;
+
+  flush_handler_t flush;
+
+  close_handler_t close;
+
+  Verbosity max_verbosit;
+};
+
+typedef std::vector<CallBack> CallBacks;
+
+static int64_t start_time{
+    std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now().time_since_epoch())
+        .count()};
+static CallBacks callBacks{};
+static int flush_interval_ms{0};
+static bool need_flush{false};
+static int8_t MAXVERBOSITY_TO_STDERR{
+    static_cast<int8_t>(Verbosity::VerbosityINFO)};
+static std::thread *flush_thread{nullptr};
 
 void log(Verbosity verbosity, const char *file, unsigned int line,
          const char *format, ...);
 
 void log_to_everywhere(Verbosity verbosity, const char *file, unsigned line,
                        const char *message);
+
+// TODO 如何解决fatal信息
+void handle_fatal_message();
 
 void log_message(Verbosity verbosity, Message &message);
 

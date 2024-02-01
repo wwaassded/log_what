@@ -49,7 +49,17 @@ void log_to_everywhere(Verbosity verbosity, const char *file, unsigned line,
   log_message(verbosity, real_message);
 }
 
-void log_message(Verbosity verbosity, Message &message) {}
+void log_message(Verbosity verbosity, Message &message) {
+  if (verbosity == Verbosity::VerbosityFATAL) {
+    handle_fatal_message();
+  }
+  if (static_cast<int8_t>(verbosity) <=
+      MAXVERBOSITY_TO_STDERR) { //* log to stderr
+    fprintf(stderr, "");
+  }
+  for (auto &callBack : callBacks) { //* log to registered callback
+  }
+}
 
 void print_prifix(char *prifix, size_t prifix_len, Verbosity verbosity,
                   const char *file, unsigned int line) {

@@ -1,5 +1,7 @@
 *.o
+.vscode/
 *.out
 test/
 build/
 *.i
+define
