@@ -15,7 +15,7 @@ typedef void (*close_handler_t)(void *user_data);
 
 #define THREADNAME_WIDTH 16
 #define FILENAME_WIDTH 23
-#define PRIFIX_WIDTH (53 + THREADNAME_WIDTH + FILENAME_WIDTH)
+#define PREFIX_WIDTH (53 + THREADNAME_WIDTH + FILENAME_WIDTH)
 
 //* VT100 control your terminal
 #ifdef TERMINAL_HAS_COLOR
@@ -46,6 +46,13 @@ const char *terminal_reset() { return VTSEQ(0); }
 // LOG(INFO,"test:%s\n",str)
 #define LOG(verbosityname, ...)                                                \
   VLOG(what::Log::Verbosity::Verbosity##verbosityname, __VA_ARGS__)
+
+// TODO
+//* 对log系统进行初始化
+void Init(int argc, char *argv[]);
+
+//* 程序退出时的执行的函数
+void exit();
 
 enum class Verbosity {
   VerbosityFATAL = -3,
@@ -97,7 +104,7 @@ public:
 
   unsigned int line;
 
-  const char *prifix;
+  const char *prefix;
 
   const char *raw_message;
 };
@@ -147,5 +154,7 @@ void print_prifix(char *prefix, size_t prefix_len, Verbosity verbosity,
 void get_thread_name(char *thread_name, size_t thread_name_len);
 
 auto filename(const char *) -> const char *;
+
+void flush();
 
 } // namespace what::Log

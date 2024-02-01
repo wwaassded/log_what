@@ -43,9 +43,9 @@ void log(Verbosity verbosity, const char *file, unsigned int line,
 
 void log_to_everywhere(Verbosity verbosity, const char *file, unsigned line,
                        const char *message) {
-  char prifix[PRIFIX_WIDTH];
-  print_prifix(prifix, sizeof prifix, verbosity, file, line);
-  Message real_message = Message{verbosity, file, line, prifix, message};
+  char prefix[PREFIX_WIDTH];
+  print_prefix(prefix, sizeof prefix, verbosity, file, line);
+  Message real_message = Message{verbosity, file, line, prefix, message};
   log_message(verbosity, real_message);
 }
 
@@ -55,13 +55,49 @@ void log_message(Verbosity verbosity, Message &message) {
   }
   if (static_cast<int8_t>(verbosity) <=
       MAXVERBOSITY_TO_STDERR) { //* log to stderr
-    fprintf(stderr, "");
+    if (verbosity > Verbosity::VerbosityWARNING) {
+      fprintf(stderr, "%s%s%s%s%s", terminal_reset(), terminal_dim(),
+              message.prefix, message.raw_message, terminal_reset());
+    } else {
+      fprintf(stderr, "%s%s%s%s%s%s", terminal_reset(), terminal_dim(),
+              verbosity < Verbosity::VerbosityWARNING ? terminal_red()
+                                                      : terminal_yellow(),
+              message.prefix, message.raw_message, terminal_reset());
+    }
+    if (flush_interval_ms == 0) {
+      fflush(stderr);
+    } else {
+      need_flush = true;
+    }
   }
   for (auto &callBack : callBacks) { //* log to registered callback
+    if (verbosity <= callBack.max_verbosit) {
+      callBack.call_back(callBack.user_data, message);
+      if (flush_interval_ms == 0) {
+        if (callBack.flush) {
+          callBack.flush(callBack.user_data);
+        }
+      } else {
+        need_flush = true;
+      }
+    }
+  }
+
+  if (flush_interval_ms != 0 && flush_thread == nullptr) {
+    flush_thread = new std::thread([] { // TODO require delete()
+      while (true) {
+        if (need_flush) {
+          flush();
+        } else {
+          std::this_thread::sleep_for(
+              std::chrono::milliseconds(flush_interval_ms));
+        }
+      }
+    });
   }
 }
 
-void print_prifix(char *prifix, size_t prifix_len, Verbosity verbosity,
+void print_prefix(char *prefix, size_t prefix_len, Verbosity verbosity,
                   const char *file, unsigned int line) {
   //*线程
   char thread_name[THREADNAME_WIDTH + 1] = {0};
@@ -87,47 +123,47 @@ void print_prifix(char *prifix, size_t prifix_len, Verbosity verbosity,
     ASSERT(verbosity_name != nullptr, "fail to get verbosity name!");
   }
 
-  //* print prifix
+  //* print prefix
   size_t pos = 0;
   // print date
   int bytes;
   bytes =
-      snprintf(prifix, prifix_len, "%04d-%02d-%02d ", 1900 + time_info.tm_year,
+      snprintf(prefix, prefix_len, "%04d-%02d-%02d ", 1900 + time_info.tm_year,
                1 + time_info.tm_mon, time_info.tm_mday);
   if (bytes > 0)
     pos += bytes;
 
-  if (pos < prifix_len) {
+  if (pos < prefix_len) {
     // print time
-    bytes = snprintf(prifix + pos, prifix_len - pos, "%02d:%02d:%02d.%03lld ",
+    bytes = snprintf(prefix + pos, prefix_len - pos, "%02d:%02d:%02d.%03lld ",
                      time_info.tm_hour, time_info.tm_min, time_info.tm_sec,
                      ms_since_epoch % 1000);
     if (bytes > 0)
       pos += bytes;
   }
 
-  if (pos < prifix_len) {
+  if (pos < prefix_len) {
     // print thread name
-    bytes = snprintf(prifix + pos, prifix_len - pos, "[%-*s]", THREADNAME_WIDTH,
+    bytes = snprintf(prefix + pos, prefix_len - pos, "[%-*s]", THREADNAME_WIDTH,
                      thread_name);
     if (bytes > 0)
       pos += bytes;
   }
 
-  if (pos < prifix_len) {
+  if (pos < prefix_len) {
     // print filename linenumber
     //文件名字过长会被裁减
     char shortened_filename[FILENAME_WIDTH + 1];
     snprintf(shortened_filename, FILENAME_WIDTH + 1, file);
-    bytes = snprintf(prifix + pos, prifix_len - pos, "%*s:%-5u ",
+    bytes = snprintf(prefix + pos, prefix_len - pos, "%*s:%-5u ",
                      FILENAME_WIDTH, shortened_filename, line);
     if (bytes > 0)
       pos += bytes;
   }
 
-  if (pos < prifix_len) {
+  if (pos < prefix_len) {
     // print verbosity
-    bytes = snprintf(prifix + pos, prifix_len - pos, "%6s| ", verbosity_level);
+    bytes = snprintf(prefix + pos, prefix_len - pos, "%6s| ", verbosity_level);
     if (bytes > 0)
       pos += bytes;
   }
