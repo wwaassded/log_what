@@ -1,5 +1,8 @@
+#ifndef LOG_WHAT_HPP
+#define LOG_WHAT_HPP
+
 #include <cassert>
-#include <define>
+#define TERMINAL_HAS_COLOR 1
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,52 +10,9 @@
 #include <unistd.h>
 #include <vector>
 
+// TODO: add_call_back(), file's callback, handle_fatal(), backtrace()
+
 namespace what::Log {
-
-typedef void (*call_back_handler_t)(void *user_data, Message &);
-typedef void (*flush_handler_t)(void *user_data);
-typedef void (*close_handler_t)(void *user_data);
-
-#define THREADNAME_WIDTH 16
-#define FILENAME_WIDTH 23
-#define PREFIX_WIDTH (53 + THREADNAME_WIDTH + FILENAME_WIDTH)
-
-//* VT100 control your terminal
-#ifdef TERMINAL_HAS_COLOR
-//! make sure that your terminal has color
-#define VTSEQ(ID) ("\033[" #ID "m")
-#else
-#define VTSEQ(ID) ""
-#endif
-
-const char *terminal_red() { return VTSEQ(31); }
-const char *terminal_green() { return VTSEQ(32); }
-const char *terminal_yellow() { return VTSEQ(33); }
-const char *terminal_dim() { return VTSEQ(2); }
-//! start and end with it everytime
-const char *terminal_reset() { return VTSEQ(0); }
-
-#define ASSERT(predict, str)                                                   \
-  do {                                                                         \
-    if (!(predict)) {                                                          \
-      fprintf(stderr, "%s\n", (str));                                          \
-      assert((predict));                                                       \
-    }                                                                          \
-  } while (0);
-
-#define VLOG(verbosity, ...)                                                   \
-  what::Log::log(verbosity, __FILE__, __LINE__, __VA_ARGS__);
-
-// LOG(INFO,"test:%s\n",str)
-#define LOG(verbosityname, ...)                                                \
-  VLOG(what::Log::Verbosity::Verbosity##verbosityname, __VA_ARGS__)
-
-// TODO
-//* 对log系统进行初始化
-void Init(int argc, char *argv[]);
-
-//* 程序退出时的执行的函数
-void exit();
 
 enum class Verbosity {
   VerbosityFATAL = -3,
@@ -62,14 +22,7 @@ enum class Verbosity {
   VerbosityMESSAGE = 1, //普通的信息
 };
 
-auto get_verbosity_name(Verbosity verbosity) -> char *;
-
-pthread_key_t thread_key;   // "static" thread local
-pthread_once_t thread_once; // call only once
-
-void init_thread_key() { pthread_key_create(&thread_key, free); }
-
-void Set_thread_name(const char *str);
+enum class FileMode { Truncate, Append };
 
 class Text {
 public:
@@ -98,7 +51,7 @@ private:
 class Message {
 public:
   /* already in prifix*/
-  Verbosity verbosity;
+  enum Verbosity verbosity;
 
   const char *file;
 
@@ -108,6 +61,10 @@ public:
 
   const char *raw_message;
 };
+
+typedef void (*call_back_handler_t)(void *user_data, Message &);
+typedef void (*flush_handler_t)(void *user_data);
+typedef void (*close_handler_t)(void *user_data);
 
 class CallBack {
 public:
@@ -122,6 +79,61 @@ public:
   Verbosity max_verbosit;
 };
 
+#define THREADNAME_WIDTH 16
+#define FILENAME_WIDTH 23
+#define PREFIX_WIDTH (53 + THREADNAME_WIDTH + FILENAME_WIDTH)
+
+//* VT100 control your terminal
+#ifdef TERMINAL_HAS_COLOR
+//! make sure that your terminal has color
+#define VTSEQ(ID) ("\033[" #ID "m")
+#else
+#define VTSEQ(ID) ""
+#endif
+
+#define TERMINAL_RED VTSEQ(31)
+#define TERMINAL_GREEN VTSEQ(32)
+#define TERMINAL_YELLOW VTSEQ(33)
+#define TERMINAL_DIM VTSEQ(2)
+//! start and end with it everytime
+#define TERMINAL_RESET VTSEQ(0)
+
+#define ASSERT(predict, str)                                                   \
+  do {                                                                         \
+    if (!(predict)) {                                                          \
+      fprintf(stderr, "%s\n", (str));                                          \
+      assert((predict));                                                       \
+    }                                                                          \
+  } while (0);
+
+void log(Verbosity verbosity, const char *file, unsigned int line,
+         const char *format, ...);
+
+#define VLOG(verbosity, ...)                                                   \
+  what::Log::log(verbosity, __FILE__, __LINE__, __VA_ARGS__);
+
+// LOG(INFO,"test:%s\n",str)
+#define LOG(verbosityname, ...)                                                \
+  VLOG(what::Log::Verbosity::Verbosity##verbosityname, __VA_ARGS__)
+
+// TODO
+//* 对log系统进行初始化
+void Init(int argc, char *argv[]);
+
+auto Add_file(const char *path_in, FileMode filemode, Verbosity verbosity)
+    -> bool;
+
+void add_callBack(void *user_data, call_back_handler_t call,
+                  flush_handler_t flush, close_handler_t close,
+                  Verbosity max_verbosity);
+
+//* 程序退出时的执行的函数
+void exit();
+
+auto get_verbosity_name(Verbosity verbosity) -> const char *;
+
+void Set_thread_name(const char *str);
+
 typedef std::vector<CallBack> CallBacks;
 
 static int64_t start_time{
@@ -135,9 +147,6 @@ static int8_t MAXVERBOSITY_TO_STDERR{
     static_cast<int8_t>(Verbosity::VerbosityINFO)};
 static std::thread *flush_thread{nullptr};
 
-void log(Verbosity verbosity, const char *file, unsigned int line,
-         const char *format, ...);
-
 void log_to_everywhere(Verbosity verbosity, const char *file, unsigned line,
                        const char *message);
 
@@ -148,13 +157,24 @@ void log_message(Verbosity verbosity, Message &message);
 
 auto vastextprint(const char *format, va_list list) -> Text;
 
-void print_prifix(char *prefix, size_t prefix_len, Verbosity verbosity,
+void print_prefix(char *prefix, size_t prefix_len, Verbosity verbosity,
                   const char *file, unsigned int line);
 
 void get_thread_name(char *thread_name, size_t thread_name_len);
 
 auto filename(const char *) -> const char *;
 
+auto home_dir() -> const char *;
+
+auto create_dir(const char *) -> bool;
+
 void flush();
 
+/******** file call back ********/
+void file_log(void *user_data, Message &message);
+void file_flush(void *user_data);
+void file_close(void *user_data);
+
 } // namespace what::Log
+
+#endif

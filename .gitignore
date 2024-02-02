@@ -5,3 +5,7 @@ test/
 build/
 *.i
 define
+test.cpp
+main
+Makefile
+test

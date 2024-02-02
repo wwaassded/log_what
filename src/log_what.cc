@@ -1,7 +1,9 @@
 #include "log_what.hpp"
 #include <chrono>
 #include <cstring>
+#include <mutex>
 #include <pthread.h>
+#include <sys/stat.h>
 
 namespace what::Log {
 
@@ -25,6 +27,13 @@ auto Text::Release() -> char * {
 }
 
 /*********************************log function*********************************/
+
+static std::recursive_mutex locker;
+
+static pthread_key_t thread_key;                       // "static" thread local
+static pthread_once_t thread_once = PTHREAD_ONCE_INIT; // call only once
+
+void init_thread_key() { pthread_key_create(&thread_key, free); }
 
 void Set_thread_name(const char *str) {
   ASSERT(str != nullptr, "str should not be null !");
@@ -50,19 +59,20 @@ void log_to_everywhere(Verbosity verbosity, const char *file, unsigned line,
 }
 
 void log_message(Verbosity verbosity, Message &message) {
+  std::unique_lock<std::recursive_mutex> lock(locker);
   if (verbosity == Verbosity::VerbosityFATAL) {
-    handle_fatal_message();
+    // handle_fatal_message();
   }
   if (static_cast<int8_t>(verbosity) <=
       MAXVERBOSITY_TO_STDERR) { //* log to stderr
     if (verbosity > Verbosity::VerbosityWARNING) {
-      fprintf(stderr, "%s%s%s%s%s", terminal_reset(), terminal_dim(),
-              message.prefix, message.raw_message, terminal_reset());
+      fprintf(stderr, "%s%s%s%s%s\n", TERMINAL_RESET, TERMINAL_DIM,
+              message.prefix, message.raw_message, TERMINAL_RESET);
     } else {
-      fprintf(stderr, "%s%s%s%s%s%s", terminal_reset(), terminal_dim(),
-              verbosity < Verbosity::VerbosityWARNING ? terminal_red()
-                                                      : terminal_yellow(),
-              message.prefix, message.raw_message, terminal_reset());
+      fprintf(stderr, "%s%s%s%s%s%s\n", TERMINAL_RESET, TERMINAL_DIM,
+              verbosity < Verbosity::VerbosityWARNING ? TERMINAL_RED
+                                                      : TERMINAL_YELLOW,
+              message.prefix, message.raw_message, TERMINAL_RESET);
     }
     if (flush_interval_ms == 0) {
       fflush(stderr);
@@ -97,6 +107,24 @@ void log_message(Verbosity verbosity, Message &message) {
   }
 }
 
+// TODO
+auto get_verbosity_name(Verbosity verbosity) -> const char * {
+  switch (verbosity) {
+  case Verbosity::VerbosityERROR:
+    return "ERR";
+  case Verbosity::VerbosityINFO:
+    return "INFO";
+  case Verbosity::VerbosityFATAL:
+    return "FATL";
+  case Verbosity::VerbosityMESSAGE:
+    return "MES";
+  case Verbosity::VerbosityWARNING:
+    return "WARN";
+  default:
+    return nullptr;
+  }
+}
+
 void print_prefix(char *prefix, size_t prefix_len, Verbosity verbosity,
                   const char *file, unsigned int line) {
   //*线程
@@ -106,7 +134,7 @@ void print_prefix(char *prefix, size_t prefix_len, Verbosity verbosity,
   //*时间
   tm time_info;
   auto ms_since_epoch = std::chrono::duration_cast<std::chrono::milliseconds>(
-                            std::chrono::steady_clock::now().time_since_epoch())
+                            std::chrono::system_clock::now().time_since_epoch())
                             .count();
   auto sec_since_epoch = time_t(ms_since_epoch / 1000);
   localtime_r(&sec_since_epoch, &time_info);
@@ -116,7 +144,7 @@ void print_prefix(char *prefix, size_t prefix_len, Verbosity verbosity,
 
   //* verbosity name
   char verbosity_level[6];
-  char *verbosity_name = get_verbosity_name(verbosity);
+  const char *verbosity_name = get_verbosity_name(verbosity);
   if (verbosity_name) {
     snprintf(verbosity_level, sizeof verbosity_level - 1, "%s", verbosity_name);
   } else {
@@ -135,7 +163,7 @@ void print_prefix(char *prefix, size_t prefix_len, Verbosity verbosity,
 
   if (pos < prefix_len) {
     // print time
-    bytes = snprintf(prefix + pos, prefix_len - pos, "%02d:%02d:%02d.%03lld ",
+    bytes = snprintf(prefix + pos, prefix_len - pos, "%02d:%02d:%02d.%03ld ",
                      time_info.tm_hour, time_info.tm_min, time_info.tm_sec,
                      ms_since_epoch % 1000);
     if (bytes > 0)
@@ -154,7 +182,7 @@ void print_prefix(char *prefix, size_t prefix_len, Verbosity verbosity,
     // print filename linenumber
     //文件名字过长会被裁减
     char shortened_filename[FILENAME_WIDTH + 1];
-    snprintf(shortened_filename, FILENAME_WIDTH + 1, file);
+    snprintf(shortened_filename, FILENAME_WIDTH + 1, "%s", file);
     bytes = snprintf(prefix + pos, prefix_len - pos, "%*s:%-5u ",
                      FILENAME_WIDTH, shortened_filename, line);
     if (bytes > 0)
@@ -181,7 +209,8 @@ void get_thread_name(char *thread_name, size_t thread_name_len) {
   if (thread_name[0] ==
       '\0') { // fail to get a specific thread name give it a hex number
     auto id = pthread_self();
-    snprintf(thread_name, thread_name_len, "%*X", thread_name_len - 1, id);
+    snprintf(thread_name, thread_name_len, "%*lX",
+             static_cast<int>(thread_name_len) - 1, id);
   }
 }
 
@@ -200,6 +229,75 @@ auto filename(const char *file) -> const char * {
     }
   }
   return file;
+}
+
+void flush() {
+  std::unique_lock<std::recursive_mutex> lock(locker);
+  fflush(stderr);
+  for (auto &callback : callBacks) {
+    if (callback.flush) {
+      callback.flush(callback.user_data);
+    }
+  }
+  need_flush = false;
+}
+
+auto Add_file(const char *path_in, FileMode filemode, Verbosity verbosity)
+    -> bool {
+  char path[FILENAME_MAX];
+  if (path_in[0] == '~') {
+    snprintf(path, FILENAME_MAX, "%s%s", home_dir(), path_in);
+  } else {
+    snprintf(path, FILENAME_MAX, "%s", path_in);
+  }
+  if (!create_dir(path)) {
+    LOG(ERROR, "failed to create dir:%s", path);
+    return false;
+  }
+  const char *mode = filemode == FileMode::Truncate ? "w" : "a";
+  FILE *file;
+  file = fopen(path, mode);
+  ASSERT(file != nullptr, "failed to open file!");
+
+  add_callBack(file, file_log, file_flush, file_close, verbosity); // TODO
+
+  LOG(MESSAGE, "FILE:%-*s FileMode:%-*s Verbosity:%-*s", FILENAME_WIDTH,
+      path_in, 5, mode, 6, get_verbosity_name(verbosity));
+  return true;
+}
+
+auto create_dir(const char *filepath) -> bool {
+  char *file = strdup(filepath);
+  for (char *p = strchr(file + 1, '/'); p; strchr(p + 1, '/')) {
+    *p = '\0';
+    if (mkdir(file, 0755) == -1) {
+      LOG(ERROR, "failed to create dir: %s", file);
+      free(file);
+      return false;
+    }
+    *p = '/';
+  }
+  free(file);
+  return true;
+}
+
+auto home_dir() -> const char * {
+  auto home = getenv("HOME");
+  ASSERT(home != nullptr, "failed to get your home directory");
+  return home;
+}
+
+//? 是否应该支持 remove_callBack
+void add_callBack(void *user_data, call_back_handler_t call,
+                  flush_handler_t flush, close_handler_t close,
+                  Verbosity max_verbosity) {
+  std::unique_lock<std::recursive_mutex> lock(locker);
+  auto tmp = CallBack{.user_data = user_data,
+                      .call_back = call,
+                      .flush = flush,
+                      .close = close,
+                      .max_verbosit = max_verbosity};
+  callBacks.push_back(std::move(tmp));
 }
 
 } // namespace what::Log
