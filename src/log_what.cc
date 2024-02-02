@@ -1,4 +1,5 @@
 #include "log_what.hpp"
+#include <atomic>
 #include <chrono>
 #include <cstring>
 #include <mutex>
@@ -32,6 +33,18 @@ static std::recursive_mutex locker;
 
 static pthread_key_t thread_key;                       // "static" thread local
 static pthread_once_t thread_once = PTHREAD_ONCE_INIT; // call only once
+
+void Init(int argc, char *argv[]) {
+  // TODO parse args
+  atexit(exit);
+}
+
+void exit() {
+  LOG(INFO, "on exit");
+  flush();
+  if (!flush_thread)
+    delete flush_thread;
+}
 
 void init_thread_key() { pthread_key_create(&thread_key, free); }
 
@@ -252,14 +265,16 @@ auto Add_file(const char *path_in, FileMode filemode, Verbosity verbosity)
   }
   if (!create_dir(path)) {
     LOG(ERROR, "failed to create dir:%s", path);
-    return false;
   }
   const char *mode = filemode == FileMode::Truncate ? "w" : "a";
   FILE *file;
   file = fopen(path, mode);
-  ASSERT(file != nullptr, "failed to open file!");
+  if (!file) {
+    LOG(ERROR, "failed to open file: %s", path);
+    return false;
+  }
 
-  add_callBack(file, file_log, file_flush, file_close, verbosity); // TODO
+  add_callBack(file, file_log, file_flush, file_close, verbosity);
 
   LOG(MESSAGE, "FILE:%-*s FileMode:%-*s Verbosity:%-*s", FILENAME_WIDTH,
       path_in, 5, mode, 6, get_verbosity_name(verbosity));
@@ -268,7 +283,7 @@ auto Add_file(const char *path_in, FileMode filemode, Verbosity verbosity)
 
 auto create_dir(const char *filepath) -> bool {
   char *file = strdup(filepath);
-  for (char *p = strchr(file + 1, '/'); p; strchr(p + 1, '/')) {
+  for (char *p = strchr(file + 1, '/'); p; p = strchr(p + 1, '/')) {
     *p = '\0';
     if (mkdir(file, 0755) == -1) {
       LOG(ERROR, "failed to create dir: %s", file);
@@ -298,6 +313,26 @@ void add_callBack(void *user_data, call_back_handler_t call,
                       .close = close,
                       .max_verbosit = max_verbosity};
   callBacks.push_back(std::move(tmp));
+}
+
+void file_log(void *user_data, Message &message) {
+  auto file = reinterpret_cast<FILE *>(user_data);
+  fprintf(file, "%s%s\n", message.prefix, message.raw_message);
+  if (flush_interval_ms == 0) {
+    fflush(file);
+  }
+}
+
+void file_flush(void *user_data) {
+  auto file = reinterpret_cast<FILE *>(user_data);
+  fflush(file);
+}
+
+void file_close(void *user_data) {
+  auto file = reinterpret_cast<FILE *>(user_data);
+  if (file) {
+    fclose(file);
+  }
 }
 
 } // namespace what::Log

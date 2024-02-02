@@ -10,7 +10,7 @@
 #include <unistd.h>
 #include <vector>
 
-// TODO: add_call_back(), file's callback, handle_fatal(), backtrace()
+// TODO: handle_fatal(), backtrace()
 
 namespace what::Log {
 

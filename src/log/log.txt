@@ -1,0 +1,5 @@
+2024-02-02 17:22:59.606 [    7FFFF7A583C0]            log_what.cc:279      MES| FILE:log/log.txt             FileMode:w     Verbosity:MES   
+2024-02-02 17:22:59.606 [    7FFFF7A583C0]               test.cpp:12      WARN| little_test
+2024-02-02 17:22:59.606 [    7FFFF7A583C0]               test.cpp:13       ERR| test
+2024-02-02 17:22:59.606 [    7FFFF7A54640]               test.cpp:11      WARN| yellow log from test thread
+2024-02-02 17:22:59.606 [    7FFFF7A583C0]            log_what.cc:43      INFO| on exit
