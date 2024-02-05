@@ -1,14 +1,11 @@
 #ifndef LOG_WHAT_HPP
 #define LOG_WHAT_HPP
 
-#include <cassert>
 #define TERMINAL_HAS_COLOR 1
-#include <stdarg.h>
+#define UNSAFE 1
+#include <cassert>
 #include <stdio.h>
 #include <stdlib.h>
-#include <thread>
-#include <unistd.h>
-#include <vector>
 
 // TODO: handle_fatal(), backtrace()
 
@@ -23,6 +20,14 @@ enum class Verbosity {
 };
 
 enum class FileMode { Truncate, Append };
+
+struct signal_t {
+  bool sigabrt{true};
+
+  // TODO wait for more signal
+
+  void none() { sigabrt = false; }
+};
 
 class Text {
 public:
@@ -41,7 +46,8 @@ public:
   auto C_str() -> const char * { return __str; }
 
   inline auto Is_empty() const -> bool {
-    return __str == nullptr || __str[0] == '\0';
+    auto it = __str == nullptr || __str[0] == '\0';
+    return it;
   }
 
 private:
@@ -95,6 +101,8 @@ public:
 #define TERMINAL_GREEN VTSEQ(32)
 #define TERMINAL_YELLOW VTSEQ(33)
 #define TERMINAL_DIM VTSEQ(2)
+#define TERMINAL_BOLD VTSEQ(1)
+#define TERMINAL_LIGHT_RED VTSEQ(91)
 //! start and end with it everytime
 #define TERMINAL_RESET VTSEQ(0)
 
@@ -106,6 +114,8 @@ public:
     }                                                                          \
   } while (0);
 
+static int flush_interval_ms{0};
+
 void log(Verbosity verbosity, const char *file, unsigned int line,
          const char *format, ...);
 
@@ -116,9 +126,20 @@ void log(Verbosity verbosity, const char *file, unsigned int line,
 #define LOG(verbosityname, ...)                                                \
   VLOG(what::Log::Verbosity::Verbosity##verbosityname, __VA_ARGS__)
 
-// TODO
+#define RAW_VLOG(verbosity, ...)                                               \
+  what::Log::raw_log(verbosity, __FILE__, __LINE__, __VA_ARGS__);
+
+#define RAW_LOG(verbosityname, ...)                                            \
+  RAW_VLOG(what::Log::Verbosity::Verbosity##verbosityname, __VA_ARGS__)
+// TODsO
 //* 对log系统进行初始化
 void Init(int argc, char *argv[]);
+
+void write_to_stderr(const char *);
+
+void write_to_stderr(const char *, size_t);
+
+void install_signal_handler(const signal_t &);
 
 auto Add_file(const char *path_in, FileMode filemode, Verbosity verbosity)
     -> bool;
@@ -133,19 +154,6 @@ void exit();
 auto get_verbosity_name(Verbosity verbosity) -> const char *;
 
 void Set_thread_name(const char *str);
-
-typedef std::vector<CallBack> CallBacks;
-
-static int64_t start_time{
-    std::chrono::duration_cast<std::chrono::microseconds>(
-        std::chrono::steady_clock::now().time_since_epoch())
-        .count()};
-static CallBacks callBacks{};
-static int flush_interval_ms{0};
-static bool need_flush{false};
-static int8_t MAXVERBOSITY_TO_STDERR{
-    static_cast<int8_t>(Verbosity::VerbosityINFO)};
-static std::thread *flush_thread{nullptr};
 
 void log_to_everywhere(Verbosity verbosity, const char *file, unsigned line,
                        const char *message);
