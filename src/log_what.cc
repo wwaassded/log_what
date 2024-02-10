@@ -53,7 +53,7 @@ static std::thread *flush_thread{nullptr};
 
 static std::recursive_mutex locker;
 
-static pthread_key_t thread_key;                       // "static" thread local
+static pthread_key_t thread_key;                       // Thread Specific Data 
 static pthread_once_t thread_once = PTHREAD_ONCE_INIT; // call only once
 
 void Init(int argc, char *argv[]) {

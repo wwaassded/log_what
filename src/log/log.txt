@@ -1,18 +1,6 @@
-2024-02-05 10:55:23.975 (   0.000s)[    7F19B6E5B740]            log_what.cc:499      MES| FILE:log/log.txt             FileMode:w     Verbosity:MES   
-2024-02-05 10:55:23.975 (   0.000s)[    7F19B6E5B740]               test.cpp:19      WARN| little_test
-2024-02-05 10:55:23.975 (   0.000s)[    7F19B6E5B740]               test.cpp:20       ERR| test
-(null)Stack Trace:
- 12      0x562dd44880e5 ./main(+0x10e5) [0x562dd44880e5]
-11      0x7f19b71bce40 __libc_start_main + 128
-10      0x7f19b71bcd90 /lib/x86_64-linux-gnu/libc.so.6(+0x29d90) [0x7f19b71bcd90]
-9       0x562dd4488282 ./main(+0x1282) [0x562dd4488282]
-8       0x562dd44881e3 ./main(+0x11e3) [0x562dd44881e3]
-7       0x562dd44881d3 ./main(+0x11d3) [0x562dd44881d3]
-6       0x562dd44881c3 ./main(+0x11c3) [0x562dd44881c3]
-5       0x562dd44881b6 ./main(+0x11b6) [0x562dd44881b6]
-4       0x7f19b71bb7f3 abort + 211
-3       0x7f19b71d5476 raise + 22
-2       0x7f19b72299fc pthread_kill + 300
-1       0x7f19b71d5520 /lib/x86_64-linux-gnu/libc.so.6(+0x42520) [0x7f19b71d5520]
-0       0x7f19b7438702 what::Log::signal_handler(int, siginfo_t*, void*) + 354
-2024-02-05 10:55:23.975 (   0.000s)[    7F19B6E5B740]                       :0       FATL| SIGABRT
+2024-02-10 12:15:35.973 (   0.000s)[    7F5C11B8A3C0]            log_what.cc:499      MES| FILE:log/log.txt             FileMode:w     Verbosity:MES   
+2024-02-10 12:15:35.974 (   0.000s)[    7F5C11B8A3C0]               test.cpp:11      WARN| little_test
+2024-02-10 12:15:35.974 (   0.000s)[    7F5C11B8A3C0]               test.cpp:17       ERR| test
+2024-02-10 12:15:35.974 (   0.000s)[little test     ]               test.cpp:15      INFO| message:i come from another thread
+
+2024-02-10 12:15:35.974 (   0.000s)[    7F5C11B8A3C0]            log_what.cc:127     INFO| on exit
