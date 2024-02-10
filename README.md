@@ -34,4 +34,4 @@ int main(int argc, char *argv[]) {
 }
 ```
 
-![这是图片](/root/log_what/image.png "Magic Gardens")
+![这是图片](./image.png "Magic Gardens")
